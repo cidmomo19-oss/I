@@ -397,10 +397,10 @@
     let currentAdIndex = Math.floor(Math.random() * adList.length);
     const REQUIRED_DURATION = 5; 
 
-    // Base URL Catbox
-    const CATBOX_BASE = "https://videypremium.my.id/";
-    const EXTENSION = ".mp4";
-    const CATBOX_BASE = "https://files.catbox.moe/";
+    const DOMAIN_LIST = [
+        "https://videypremium.my.id/",  // Akan jadi Server 1 (S1)
+        "https://files.catbox.moe/"     // Akan jadi Server 2 (S2)
+    ];
     const EXTENSION = ".mp4";
 
     let activeVideoUrl = "";
