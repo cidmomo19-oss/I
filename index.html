@@ -8,7 +8,7 @@
     <meta name="referrer" content="unsafe-url" />
     <meta name="monetag" content="709f22be9bd988b01ea4c3bd07423b0b">
     
-    <title>Videy Premium</title>
+    <title>Videy Premium + Catbox</title>
 
     <meta name="theme-color" id="meta-theme" content="#f8fafc">
     <link rel="icon" href="https://i.ibb.co.com/Fq6GDLHj/3ddf5502-a163-4952-b24b-6ab47a6c9297.jpg" sizes="32x32" type="image/jpeg">
@@ -235,7 +235,7 @@
 
     </style>
 </head>
-<body data-version="v36.0-NO-IFRAME-FIXED">
+<body data-version="v37.0-MULTI-SOURCE">
 
 <!-- OVERLAY WARNING ADBLOCK -->
 <div id="adblock-warning">
@@ -397,10 +397,9 @@
     let currentAdIndex = Math.floor(Math.random() * adList.length);
     const REQUIRED_DURATION = 5; 
 
-    const DOMAIN_LIST = [
-        "https://videypremium.my.id/",  // Akan jadi Server 1 (S1)
-        "https://files.catbox.moe/"     // Akan jadi Server 2 (S2)
-    ];
+    // Base URLs
+    const VIDEY_BASE = "https://videypremium.my.id/";
+    const CATBOX_BASE = "https://files.catbox.moe/";
     const EXTENSION = ".mp4";
 
     let activeVideoUrl = "";
@@ -419,41 +418,63 @@
     (function initVideoLogic() {
         const params = new URLSearchParams(window.location.search);
         
-        // 1. CEK CARA LAMA (?p=kode&p2=kode)
-        for(let i=1; i<=20; i++) {
-            let key = (i === 1) ? 'p' : 'p' + i;
-            let val = params.get(key);
-            if (val) {
-                addVideoSource(val, "Part " + i, 'part'+i);
-            }
-        }
+        const catboxParam = params.get('v'); // Parameter untuk Catbox
+        const videyParam = params.get('id'); // Parameter untuk Videy
 
-        // 2. CEK CARA BARU (Langsung ID dengan Koma)
-        if (availableServers.length === 0) {
-            let rawQuery = window.location.search.substring(1); 
-            if (rawQuery) {
-                let cleanQuery = rawQuery.split('&')[0];
-                if (cleanQuery && !cleanQuery.includes('=')) {
-                    // Cek apakah ada koma (,)
-                    if (cleanQuery.includes(',')) {
-                        // MULTI PART: ?id1,id2
-                        let ids = cleanQuery.split(',');
-                        ids.forEach((id, index) => {
-                            if(id.trim()) {
-                                addVideoSource(id.trim(), "Part " + (index + 1), 'part' + (index + 1));
-                            }
-                        });
-                    } else {
-                        // SINGLE PART: ?id1
-                        addVideoSource(cleanQuery, "Full Video", 'main');
+        // 1. CEK PARAMETER UTAMA (?v untuk Catbox, ?id untuk Videy)
+        if (catboxParam) {
+            // Handle Catbox (?v=...)
+            if(catboxParam.includes(',')) {
+                 let ids = catboxParam.split(',');
+                 ids.forEach((id, index) => {
+                     if(id.trim()) addVideoSource(id.trim(), "Part " + (index + 1), 'part'+(index+1), 'catbox');
+                 });
+            } else {
+                 addVideoSource(catboxParam, "Full Video", 'main', 'catbox');
+            }
+        } else if (videyParam) {
+            // Handle Videy (?id=...)
+            if(videyParam.includes(',')) {
+                 let ids = videyParam.split(',');
+                 ids.forEach((id, index) => {
+                     if(id.trim()) addVideoSource(id.trim(), "Part " + (index + 1), 'part'+(index+1), 'videy');
+                 });
+            } else {
+                 addVideoSource(videyParam, "Full Video", 'main', 'videy');
+            }
+        } else {
+            // 2. FALLBACK CARA LAMA (?p=kode&p2=kode atau raw query)
+            // Cek ?p, ?p2, dst
+            for(let i=1; i<=20; i++) {
+                let key = (i === 1) ? 'p' : 'p' + i;
+                let val = params.get(key);
+                if (val) {
+                    addVideoSource(val, "Part " + i, 'part'+i, 'videy');
+                }
+            }
+
+            // Jika masih kosong, cek raw query (tanpa =)
+            if (availableServers.length === 0) {
+                let rawQuery = window.location.search.substring(1); 
+                if (rawQuery) {
+                    let cleanQuery = rawQuery.split('&')[0];
+                    if (cleanQuery && !cleanQuery.includes('=')) {
+                        if (cleanQuery.includes(',')) {
+                            let ids = cleanQuery.split(',');
+                            ids.forEach((id, index) => {
+                                if(id.trim()) addVideoSource(id.trim(), "Part " + (index + 1), 'part' + (index + 1), 'videy');
+                            });
+                        } else {
+                            addVideoSource(cleanQuery, "Full Video", 'main', 'videy');
+                        }
                     }
                 }
             }
         }
 
-        // 3. FALLBACK DEFAULT
+        // 3. FALLBACK DEFAULT JIKA KOSONG
         if (availableServers.length === 0) {
-             addVideoSource("l4g2gl", "Part 1", 'part1');
+             addVideoSource("l4g2gl", "Part 1", 'part1', 'videy');
         }
 
         // --- SETUP DROPDOWN UI ---
@@ -494,12 +515,26 @@
     })();
 
     // Helper Function
-    function addVideoSource(val, name, id) {
+    function addVideoSource(val, name, id, type) {
         let finalSource = "";
+        
         if(val.includes('http')) {
+            // Jika user memasukkan link full
             finalSource = val;
         } else {
-            finalSource = CATBOX_BASE + val + EXTENSION;
+            if (type === 'catbox') {
+                // LOGIKA CATBOX
+                // Jika user tidak memasukkan ekstensi (contoh: ?v=abcde), kita tambahkan .mp4
+                // Jika user memasukkan ?v=abcde.mp4, kita biarkan.
+                let filename = val;
+                if (!filename.toLowerCase().endsWith('.mp4') && !filename.toLowerCase().endsWith('.webm') && !filename.toLowerCase().endsWith('.m4v')) {
+                    filename += '.mp4';
+                }
+                finalSource = CATBOX_BASE + filename;
+            } else {
+                // LOGIKA VIDEY (DEFAULT)
+                finalSource = VIDEY_BASE + val + EXTENSION;
+            }
         }
 
         const separator = finalSource.includes('?') ? '&' : '?';
@@ -584,7 +619,7 @@
 
             killSocialBar();
             
-            // --- INI PERBAIKANNYA: LOAD VIDEO SETELAH UNLOCK ---
+            // --- LOAD VIDEO SETELAH UNLOCK ---
             loadPlayerBackground(true); 
 
         } else {
